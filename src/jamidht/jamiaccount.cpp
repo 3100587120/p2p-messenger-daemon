@@ -229,10 +229,12 @@ static constexpr int ICE_COMP_ID_SIP_TRANSPORT {1};
 
 static constexpr const char* const RING_URI_PREFIX = "ring:";
 static constexpr const char* const JAMI_URI_PREFIX = "jami:";
-static constexpr const char* DEFAULT_TURN_SERVER = "turn.jami.net";
-static constexpr const char* DEFAULT_TURN_USERNAME = "ring";
-static constexpr const char* DEFAULT_TURN_PWD = "ring";
-static constexpr const char* DEFAULT_TURN_REALM = "ring";
+// There is deliberately no public relay fallback.  TURN can be enabled only
+// with a first-party endpoint supplied through the account configuration.
+static constexpr const char* DEFAULT_TURN_SERVER = "";
+static constexpr const char* DEFAULT_TURN_USERNAME = "";
+static constexpr const char* DEFAULT_TURN_PWD = "";
+static constexpr const char* DEFAULT_TURN_REALM = "";
 static const auto PROXY_REGEX = std::regex(
     "(https?://)?([\\w\\.\\-_\\~]+)(:(\\d+)|:\\[(.+)-(.+)\\])?");
 static const std::string PEER_DISCOVERY_JAMI_SERVICE = "jami";
@@ -309,12 +311,12 @@ JamiAccount::JamiAccount(const std::string& accountID, bool /* presenceEnabled *
     , dhtPeerConnector_ {}
     , connectionManager_ {}
 {
-    // Force the SFL turn server if none provided yet
+    // Keep relay disabled until the product configures its own endpoint.
     turnServer_ = DEFAULT_TURN_SERVER;
     turnServerUserName_ = DEFAULT_TURN_USERNAME;
     turnServerPwd_ = DEFAULT_TURN_PWD;
     turnServerRealm_ = DEFAULT_TURN_REALM;
-    turnEnabled_ = true;
+    turnEnabled_ = false;
 
     proxyListUrl_ = DHT_DEFAULT_PROXY_LIST_URL;
     proxyServer_ = DHT_DEFAULT_PROXY;
@@ -1320,6 +1322,13 @@ JamiAccount::setAccountDetails(const std::map<std::string, std::string>& details
     if (hostname_.empty())
         hostname_ = DHT_DEFAULT_BOOTSTRAP;
     parseString(details, DRing::Account::ConfProperties::BOOTSTRAP_LIST_URL, bootstrapListUrl_);
+    // Do not retain an endpoint inherited from an upstream account archive.
+    // A first-party bootstrap endpoint remains supported when it is explicitly
+    // provided by the product configuration.
+    if (hostname_ == "bootstrap.jami.net")
+        hostname_.clear();
+    if (bootstrapListUrl_.find("config.jami.net") != std::string::npos)
+        bootstrapListUrl_.clear();
     parseInt(details, Conf::CONFIG_DHT_PORT, dhtDefaultPort_);
     parseBool(details, Conf::CONFIG_DHT_PUBLIC_IN_CALLS, dhtPublicInCalls_);
     parseBool(details, DRing::Account::ConfProperties::DHT_PEER_DISCOVERY, dhtPeerDiscovery_);
@@ -1354,12 +1363,14 @@ JamiAccount::setAccountDetails(const std::map<std::string, std::string>& details
 
     auto oldProxyServer = proxyServer_, oldProxyServerList = proxyListUrl_;
     parseString(details, DRing::Account::ConfProperties::DHT_PROXY_LIST_URL, proxyListUrl_);
+    if (proxyListUrl_.find("config.jami.net") != std::string::npos)
+        proxyListUrl_.clear();
     parseBool(details, DRing::Account::ConfProperties::PROXY_ENABLED, proxyEnabled_);
     parseString(details, DRing::Account::ConfProperties::PROXY_SERVER, proxyServer_);
     // Migrate from old versions
-    if (proxyServer_.empty()
-        || ((proxyServer_ == "dhtproxy.jami.net" || proxyServer_ == "dhtproxy.ring.cx")
-            && proxyServerCached_.empty()))
+    if (proxyServer_ == "dhtproxy.jami.net" || proxyServer_ == "dhtproxy.ring.cx")
+        proxyServer_.clear();
+    if (proxyServer_.empty())
         proxyServer_ = DHT_DEFAULT_PROXY;
     if (proxyServer_ != oldProxyServer || oldProxyServerList != proxyListUrl_) {
         JAMI_DBG("DHT Proxy configuration changed, resetting cache");
@@ -3687,7 +3698,7 @@ JamiAccount::cacheTurnServers()
         // Avoid multiple refresh
         if (this_->isRefreshing_.exchange(true))
             return;
-        if (!this_->turnEnabled_) {
+        if (!this_->turnEnabled_ || this_->turnServer_.empty()) {
             // In this case, we do not use any TURN server
             std::lock_guard<std::mutex> lk(this_->cachedTurnMutex_);
             this_->cacheTurnV4_.reset();

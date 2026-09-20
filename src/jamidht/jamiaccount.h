@@ -106,12 +106,14 @@ class JamiAccount : public SIPAccountBase
 public:
     constexpr static const char* const ACCOUNT_TYPE = "RING";
     constexpr static const in_port_t DHT_DEFAULT_PORT = 4222;
-    constexpr static const char* const DHT_DEFAULT_BOOTSTRAP = "bootstrap.jami.net";
-    constexpr static const char* const DHT_DEFAULT_PROXY = "dhtproxy.jami.net:[80-95]";
-    constexpr static const char* const DHT_DEFAULT_BOOTSTRAP_LIST_URL
-        = "https://config.jami.net/boostrapList";
-    constexpr static const char* const DHT_DEFAULT_PROXY_LIST_URL
-        = "https://config.jami.net/proxyList";
+    // P2P Messenger ships without upstream network endpoints.  A product
+    // operator may explicitly configure first-party bootstrap or proxy
+    // endpoints, but a newly created account must never contact one by
+    // default.
+    constexpr static const char* const DHT_DEFAULT_BOOTSTRAP = "";
+    constexpr static const char* const DHT_DEFAULT_PROXY = "";
+    constexpr static const char* const DHT_DEFAULT_BOOTSTRAP_LIST_URL = "";
+    constexpr static const char* const DHT_DEFAULT_PROXY_LIST_URL = "";
 
     /* constexpr */ static const std::pair<uint16_t, uint16_t> DHT_PORT_RANGE;
     constexpr static int ICE_STREAMS_COUNT {1};
