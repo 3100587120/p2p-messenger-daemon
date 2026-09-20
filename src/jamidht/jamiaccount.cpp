@@ -1244,10 +1244,7 @@ JamiAccount::loadAccount(const std::string& archive_password,
                     registeredName_ = managerUsername_;
                     deviceName_ = accountManager_->getAccountDeviceName();
 
-                    auto nameServerIt = config.find(DRing::Account::ConfProperties::RingNS::URI);
-                    if (nameServerIt != config.end() && !nameServerIt->second.empty()) {
-                        nameServer_ = nameServerIt->second;
-                    }
+                    nameServer_.clear();
                     auto displayNameIt = config.find(DRing::Account::ConfProperties::DISPLAYNAME);
                     if (displayNameIt != config.end() && !displayNameIt->second.empty()) {
                         displayName_ = displayNameIt->second;
@@ -1380,12 +1377,13 @@ JamiAccount::setAccountDetails(const std::map<std::string, std::string>& details
         std::remove(proxyCachePath.c_str());
         std::remove(proxyListCachePath.c_str());
     }
-    if (not managerUri_.empty() and managerUri_.rfind("http", 0) != 0) {
-        managerUri_ = "https://" + managerUri_;
-    }
+    // P2P Messenger never delegates account management or name resolution to
+    // the upstream network. Device identities are created and retained locally.
+    managerUri_.clear();
+    managerUsername_.clear();
 
 #if HAVE_RINGNS
-    parseString(details, DRing::Account::ConfProperties::RingNS::URI, nameServer_);
+    nameServer_.clear();
 #endif
 
     // update device name if necessary
@@ -3441,9 +3439,10 @@ JamiAccount::enableProxyClient(bool enable)
 void
 JamiAccount::setPushNotificationToken(const std::string& token)
 {
-    JAMI_WARN("[Account %s] setPushNotificationToken: %s", getAccountID().c_str(), token.c_str());
-    deviceKey_ = token;
-    dht_->setPushNotificationToken(deviceKey_);
+    // Push providers are third-party network services. The custom client does
+    // not register device tokens; foreground delivery uses the private engine.
+    (void) token;
+    deviceKey_.clear();
 }
 
 /**
